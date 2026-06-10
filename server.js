@@ -7,15 +7,31 @@ require('dotenv').config();
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// טעינת ההרשאות
-const credentialsPath = path.join(__dirname, 'credentials.json');
+// --- SECURE CREDENTIALS LOADING FOR CLOUD DEPLOYMENT ---
 let credentials;
-try {
-    credentials = JSON.parse(fs.readFileSync(credentialsPath, 'utf8'));
-} catch (e) {
-    console.error("❌ Error: Cannot find credentials.json");
-    process.exit(1);
+// First, try to load from environment variables (for AWS/Render)
+if (process.env.GOOGLE_CLIENT_EMAIL && process.env.GOOGLE_PRIVATE_KEY) {
+    console.log("Loading credentials from environment variables...");
+    credentials = {
+        client_email: process.env.GOOGLE_CLIENT_EMAIL,
+        // In cloud environments, the private key may have its newlines escaped.
+        // We replace the escaped newlines with actual newlines.
+        private_key: process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n')
+    };
+} 
+// Otherwise, fall back to the local file (for local development)
+else {
+    console.log("Loading credentials from local credentials.json file...");
+    const credentialsPath = path.join(__dirname, 'credentials.json');
+    try {
+        credentials = JSON.parse(fs.readFileSync(credentialsPath, 'utf8'));
+    } catch (e) {
+        console.error("❌ Error: Cannot find credentials.json and environment variables are not set.");
+        process.exit(1);
+    }
 }
+// --- END OF SECURE LOADING ---
+
 
 // חיבור ל-Drive
 const auth = new google.auth.JWT({
