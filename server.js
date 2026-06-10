@@ -7,20 +7,47 @@ require('dotenv').config();
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// פונקציה חכמה שמתקנת כל בעיית רווחים או שבירת שורות במפתח הפרטי
+function formatPrivateKey(rawKey) {
+    if (!rawKey) return '';
+    
+    // שלב 1: החלפת שורות חדשות וירטואליות לאמיתיות והסרת מרכאות
+    let k = rawKey.replace(/\\n/g, '\n').replace(/^["'\s]+|["'\s]+$/g, '');
+    
+    const header = "-----BEGIN PRIVATE KEY-----";
+    const footer = "-----END PRIVATE KEY-----";
+    
+    // שלב 2: אם המפתח מכיל את הכותרות, נסדר את התוכן הפנימי בצורה מושלמת
+    if (k.includes(header) && k.includes(footer)) {
+        let startIndex = k.indexOf(header) + header.length;
+        let endIndex = k.indexOf(footer);
+        
+        let body = k.substring(startIndex, endIndex);
+        
+        // מחיקת כל הרווחים והשורות החדשות מהתוכן והשארת רק את ה-Base64
+        body = body.replace(/\s+/g, '');
+        
+        // חלוקת התוכן לשורות של 64 תווים בדיוק (התקן הנדרש)
+        let formattedBody = '';
+        for (let i = 0; i < body.length; i += 64) {
+            formattedBody += body.substring(i, i + 64) + '\n';
+        }
+        
+        return `${header}\n${formattedBody}${footer}\n`;
+    }
+    
+    return k;
+}
+
 // --- SECURE CREDENTIALS LOADING FOR CLOUD DEPLOYMENT ---
 let credentials;
 // First, try to load from environment variables (for AWS/Render)
 if (process.env.GOOGLE_CLIENT_EMAIL && process.env.GOOGLE_PRIVATE_KEY) {
     console.log("Loading credentials from environment variables...");
     
-    // ניקוי המפתח הפרטי במקרה שהועתק עם מרכאות כפולות, רווחים מיותרים וכו'
-    let rawKey = process.env.GOOGLE_PRIVATE_KEY;
-    rawKey = rawKey.replace(/^"|"$/g, ''); // מסיר מרכאות בהתחלה ובסוף אם יש
-    rawKey = rawKey.replace(/\\n/g, '\n'); // מחליף תווי שורה חדשה וירטואליים באמיתיים
-    
     credentials = {
         client_email: process.env.GOOGLE_CLIENT_EMAIL.replace(/^"|"$/g, '').trim(),
-        private_key: rawKey
+        private_key: formatPrivateKey(process.env.GOOGLE_PRIVATE_KEY)
     };
 } 
 // Otherwise, fall back to the local file (for local development)
@@ -133,7 +160,6 @@ app.post('/api/download-zip', async (req, res) => {
 
         console.log(`\n📦 Starting ZIP creation for ${ids.length} images...`);
 
-        // שימוש ב-jszip שבדרך כלל עובד הרבה יותר טוב בסביבות Node נטולות תוספים מורכבים
         const JSZip = require('jszip');
         const zip = new JSZip();
 
@@ -141,13 +167,11 @@ app.post('/api/download-zip', async (req, res) => {
             try {
                 console.log(`Fetching image ${i + 1}/${ids.length} (ID: ${ids[i]})`);
                 
-                // כאן אנחנו מורידים כ-ArrayBuffer כי JSZip יודע לעבוד איתו מושלם
                 const response = await drive.files.get(
                     { fileId: ids[i], alt: 'media' },
                     { responseType: 'arraybuffer' }
                 );
 
-                // מוסיפים את התמונה ל-ZIP בזיכרון
                 zip.file(`Wedding_Photo_${i+1}.jpg`, response.data);
                 console.log(`✅ Image ${i + 1} added to ZIP`);
 
@@ -158,11 +182,9 @@ app.post('/api/download-zip', async (req, res) => {
 
         console.log('✅ Finalizing ZIP...');
         
-        // מגדיר לדפדפן שמדובר בקובץ להורדה
         res.setHeader('Content-Type', 'application/zip');
         res.attachment('Gal_And_Shoval_Wedding_Collection.zip');
         
-        // הופך את ה-ZIP לזרם נתונים ויורה אותו ישירות ללקוח
         zip.generateNodeStream({ type: 'nodebuffer', streamFiles: true })
            .pipe(res)
            .on('finish', function () {
