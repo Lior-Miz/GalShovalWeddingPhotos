@@ -12,11 +12,15 @@ let credentials;
 // First, try to load from environment variables (for AWS/Render)
 if (process.env.GOOGLE_CLIENT_EMAIL && process.env.GOOGLE_PRIVATE_KEY) {
     console.log("Loading credentials from environment variables...");
+    
+    // ניקוי המפתח הפרטי במקרה שהועתק עם מרכאות כפולות, רווחים מיותרים וכו'
+    let rawKey = process.env.GOOGLE_PRIVATE_KEY;
+    rawKey = rawKey.replace(/^"|"$/g, ''); // מסיר מרכאות בהתחלה ובסוף אם יש
+    rawKey = rawKey.replace(/\\n/g, '\n'); // מחליף תווי שורה חדשה וירטואליים באמיתיים
+    
     credentials = {
-        client_email: process.env.GOOGLE_CLIENT_EMAIL,
-        // In cloud environments, the private key may have its newlines escaped.
-        // We replace the escaped newlines with actual newlines.
-        private_key: process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n')
+        client_email: process.env.GOOGLE_CLIENT_EMAIL.replace(/^"|"$/g, '').trim(),
+        private_key: rawKey
     };
 } 
 // Otherwise, fall back to the local file (for local development)
@@ -41,7 +45,7 @@ const auth = new google.auth.JWT({
 });
 
 const drive = google.drive({ version: 'v3', auth });
-const FOLDER_ID = process.env.DRIVE_FOLDER_ID;
+const FOLDER_ID = process.env.DRIVE_FOLDER_ID ? process.env.DRIVE_FOLDER_ID.replace(/^"|"$/g, '').trim() : '';
 
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
@@ -68,8 +72,8 @@ app.get('/api/images', async (req, res) => {
         console.log(`--- Found ${imagesResponse.data.files.length} images ---`);
         res.json(imagesResponse.data.files);
     } catch (error) {
-        console.error('Error:', error.message);
-        res.status(500).send('Error fetching list');
+        console.error('Error fetching from Drive API:', error.message);
+        res.status(500).send('Error fetching list: ' + error.message);
     }
 });
 
