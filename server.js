@@ -49,6 +49,11 @@ if (process.env.GOOGLE_CLIENT_EMAIL && process.env.GOOGLE_PRIVATE_KEY) {
         client_email: process.env.GOOGLE_CLIENT_EMAIL.replace(/^"|"$/g, '').trim(),
         private_key: formatPrivateKey(process.env.GOOGLE_PRIVATE_KEY)
     };
+    
+    // LOGGING TO DEBUG THE KEY DECODING ISSUE (without exposing the whole key)
+    console.log("DEBUG - Key starts with:", credentials.private_key.substring(0, 35).replace(/\n/g, '\\n'));
+    console.log("DEBUG - Key ends with:", credentials.private_key.substring(credentials.private_key.length - 35).replace(/\n/g, '\\n'));
+    console.log("DEBUG - Key total length:", credentials.private_key.length);
 } 
 // Otherwise, fall back to the local file (for local development)
 else {
